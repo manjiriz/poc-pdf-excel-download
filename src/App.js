@@ -7,7 +7,9 @@ import xlsx from 'xlsx';
 import fileSaver from 'file-saver';
 import input24HoursJson from './input24Json';
 import input30DaysJson from './input30DaysJson';
+import weatherData24hrs from './weatherData24hrs';
 import _ from 'lodash';
+import FormatNeighbourhoodUsage from "./formatDataForNeighbourhoodUsg";
 
 class App extends Component {
   constructor() {
@@ -32,7 +34,9 @@ class App extends Component {
   }
 
   format30DaysData() {
-    var columns_30TableSet = this.columns_TableSet;
+    var columns_30TableSet = []; /* [
+      { title: "Date", dataKey: "time" }
+    ]; *///_.cloneDeep(this.columns_TableSet);
     var arr_30formattedTime = [];
     var inputjson30 = _.cloneDeep(input30DaysJson);
 
@@ -55,17 +59,20 @@ class App extends Component {
     //this.doc.lineHeightProportion = 2;
 
     while (columns_30TableSet.length && reverse30Data.length) {
-      var colObj = [{ title: "Time", dataKey: "time" }];
-      var hardCodedRow = { "time": "Usage in Gallons" };
+      var colObj = [{ title: "Date", dataKey: "time" }];
+      var hardCodedRowGallons = { "time": "Usage in Gallons" };
       var rows_TableSet = [];
       var cd = columns_30TableSet.splice(0, 5);
       var rd = reverse30Data.splice(0, 5);
 
       for (let i = 0; i < cd.length; i++) {
         colObj.push(cd[i]);
-        hardCodedRow[cd[i].dataKey] = rd[i].consumption;
+        hardCodedRowGallons[cd[i].dataKey] = rd[i].consumption;
       }
-      rows_TableSet.push(hardCodedRow);
+      rows_TableSet.push(hardCodedRowGallons);
+
+      console.log('------30Days colObj------', colObj);
+      console.log('------30days row_tebl----', rows_TableSet);
 
       this.doc.autoTable(colObj, rows_TableSet, {
         margin: {
@@ -79,11 +86,12 @@ class App extends Component {
   }
 
   formatData() {
-    var columns_24TableSet = this.columns_TableSet;
+    var columns_24TableSet = _.cloneDeep(this.columns_TableSet);
 
     var arr_formattedTime = [];
 
     var inputJson = _.cloneDeep(input24HoursJson);
+    var weatherData24hrsJson = _.cloneDeep(weatherData24hrs);
     inputJson[0].meters[0].meterConsumption.forEach(element => {
       var formattedTime = this.formatAMPM(new Date(element.readingDatetime));
       arr_formattedTime.push({ "title": formattedTime, "dataKey": formattedTime });
@@ -106,16 +114,32 @@ class App extends Component {
 
     while (columns_24TableSet.length && reverseData.length) {
       var colObj = [{ title: "Time", dataKey: "time" }];
-      var hardCodedRow = { "time": "Usage in Gallons" };
+      var hardCodedRowGallons = { "time": "Usage in Gallons" };
+      var hardCodedRowTemp = { "time": "Temperature in F" };
+      var hardCodedRowPreci = {"time": "Precipitation"};
       var rows_TableSet = [];
       var cd = columns_24TableSet.splice(0, 8);
       var rd = reverseData.splice(0, 8);
 
+      var rdtemp = weatherData24hrsJson.splice(0, 8);
+
       for (let i = 0; i < cd.length; i++) {
         colObj.push(cd[i]);
-        hardCodedRow[cd[i].dataKey] = rd[i].consumption;
+        hardCodedRowGallons[cd[i].dataKey] = rd[i].consumption;
       }
-      rows_TableSet.push(hardCodedRow);
+      rows_TableSet.push(hardCodedRowGallons);
+
+      for (let j = 0; j < cd.length; j++) {
+        hardCodedRowTemp[cd[j].dataKey] = rdtemp[j].temp_f.replace(/,\s*$/, "");
+      }
+
+      rows_TableSet.push(hardCodedRowTemp);
+
+      for (let k = 0; k < cd.length; k++) {
+        hardCodedRowPreci[cd[k].dataKey] = rdtemp[k].past1hourprecipitation_in.replace(/,\s*$/, "");
+      }
+
+      rows_TableSet.push(hardCodedRowPreci);
 
       this.doc.autoTable(colObj, rows_TableSet, {
         margin: {
@@ -126,6 +150,8 @@ class App extends Component {
     }
 
     this.format30DaysData();
+    console.log('-------FormatNeighbourhoodUsage-----',this.columns_TableSet);
+    new FormatNeighbourhoodUsage().formatNeighbourhoodData(this.columns_TableSet, this.doc);
     this.doc.save('UsageOverviewData.pdf');
 
   }
@@ -144,12 +170,15 @@ class App extends Component {
     var jsonForXlsx = [{ "Time": "Usage in Gallons" }];
     
     var json24 = _.cloneDeep(input24HoursJson);
+    var weatherData24hrsJson = _.cloneDeep(weatherData24hrs);
     var xlsxJson = json24[0].meters[0].meterConsumption.reverse();
     
     xlsxJson.pop();
 
     var ws_24_data_one = [["Time"]];
     var ws_24data_two = [["Usage in Gallons"]];
+    var ws_24data_three = [["Temperature in F"]];
+    var ws_24_data_four = [["Precipitation"]];
 
     xlsxJson.map(item => {
       item.formattedDate = this.formatAMPM(new Date(item.readingDatetime));
@@ -158,7 +187,12 @@ class App extends Component {
       ws_24data_two[0].push([item.consumption]);
     });
 
-    var ws_24data = ws_24_data_one.concat(ws_24data_two);
+    weatherData24hrsJson.map(data => {
+      ws_24data_three[0].push([data.temp_f.replace(/,\s*$/, "")]);
+      ws_24_data_four[0].push([data.past1hourprecipitation_in.replace(/,\s*$/, "")]);
+    });
+
+    var ws_24data = ws_24_data_one.concat(ws_24data_two).concat(ws_24data_three).concat(ws_24_data_four);
 
     var ws = xlsx.utils.aoa_to_sheet(ws_24data, { header: "A" });
     //var ws = xlsx.utils.json_to_sheet(jsonForXlsx);
